@@ -20,35 +20,63 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (stored.targetLanguage) langSelect.value = stored.targetLanguage;
   if (stored.autoTranslate) autoTranslate.checked = true;
 
+  /**
+   * Safe message sender - handles "Receiving end does not exist" gracefully
+   */
+  function safeSendMessage(tabId, message, callback) {
+    try {
+      chrome.tabs.sendMessage(tabId, message, (response) => {
+        if (chrome.runtime.lastError) {
+          console.warn('[Popup] Message failed:', chrome.runtime.lastError.message);
+          showStatus('Please refresh the Skilljar page first', 'error');
+          if (callback) callback(null);
+          return;
+        }
+        if (callback) callback(response);
+      });
+    } catch (e) {
+      console.warn('[Popup] sendMessage error:', e);
+      showStatus('Please refresh the Skilljar page first', 'error');
+    }
+  }
+
   // Language change
   langSelect.addEventListener('change', () => {
     chrome.storage.local.set({ targetLanguage: langSelect.value });
-    chrome.tabs.sendMessage(tab.id, { action: 'setLanguage', language: langSelect.value });
+    safeSendMessage(tab.id, { action: 'setLanguage', language: langSelect.value });
   });
 
   // Translate button
-  document.getElementById('translate-btn').addEventListener('click', async () => {
+  document.getElementById('translate-btn').addEventListener('click', () => {
     const lang = langSelect.value;
     if (lang === 'en') {
-      chrome.tabs.sendMessage(tab.id, { action: 'restoreOriginal' });
-      showStatus('Restored to English', 'success');
+      safeSendMessage(tab.id, { action: 'restoreOriginal' }, () => {
+        showStatus('Restored to English', 'success');
+      });
     } else {
       showStatus('Translating...', '');
-      chrome.tabs.sendMessage(tab.id, { action: 'translatePage', language: lang }, (response) => {
-        showStatus(response?.success ? 'Translation complete!' : 'Translation error', response?.success ? 'success' : 'error');
+      safeSendMessage(tab.id, { action: 'translatePage', language: lang }, (response) => {
+        if (response?.success) {
+          showStatus('Translation started!', 'success');
+        } else if (response === null) {
+          // Error already shown by safeSendMessage
+        } else {
+          showStatus('Translation error', 'error');
+        }
       });
     }
   });
 
   // Restore button
   document.getElementById('restore-btn').addEventListener('click', () => {
-    chrome.tabs.sendMessage(tab.id, { action: 'restoreOriginal' });
-    showStatus('Restored to original', 'success');
+    safeSendMessage(tab.id, { action: 'restoreOriginal' }, () => {
+      showStatus('Restored to original', 'success');
+    });
   });
 
   // Sidebar button
   document.getElementById('sidebar-btn').addEventListener('click', () => {
-    chrome.tabs.sendMessage(tab.id, { action: 'toggleSidebar' });
+    safeSendMessage(tab.id, { action: 'toggleSidebar' });
     window.close();
   });
 
@@ -60,6 +88,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   function showStatus(text, type) {
     status.textContent = text;
     status.className = `status ${type}`;
-    if (type) setTimeout(() => { status.textContent = ''; status.className = 'status'; }, 3000);
+    if (type) setTimeout(() => { status.textContent = ''; status.className = 'status'; }, 4000);
   }
 });

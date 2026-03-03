@@ -10,78 +10,126 @@
   'use strict';
 
   const SELECTORS = {
-    // Skilljar common selectors
-    courseTitle: '.course-title, h1.title, .catalog-course-title',
+    courseTitle: '.course-title, h1.title, .catalog-course-title, .course-catalog-title',
     lessonContent: '.lesson-content, .page-content, .content-area, .catalog-course-description',
     headings: 'h1, h2, h3, h4, h5, h6',
-    paragraphs: '.lesson-content p, .page-content p, .content-area p',
-    listItems: '.lesson-content li, .page-content li',
+    paragraphs: '.lesson-content p, .page-content p, .content-area p, main p, article p',
+    listItems: '.lesson-content li, .page-content li, main li',
     buttons: '.btn-text, button span, .nav-text',
     sidebarItems: '.sidebar-item, .lesson-title, .section-title',
     quizContent: '.quiz-question, .quiz-answer, .assessment-content',
-    // Exclude code blocks and technical content
-    excludeSelectors: 'code, pre, .code-block, .syntax-highlight, script, style, .skilljar-i18n-sidebar',
+    // Broader fallback selectors for Skilljar variants
+    generic: 'main p, main li, main h1, main h2, main h3, main h4, article p, article li',
+    excludeSelectors: 'code, pre, .code-block, .syntax-highlight, script, style, .skilljar-i18n-sidebar, #skilljar-i18n-bridge, #skilljar-i18n-fab',
   };
 
   let translator = null;
   let currentLang = 'en';
   let isTranslating = false;
+  let isReady = false;
   let sidebarVisible = false;
   let originalTexts = new Map();
+  let pendingActions = [];
 
   // ============================================================
-  // INITIALIZATION
+  // REGISTER MESSAGE LISTENER IMMEDIATELY (before async init)
+  // This prevents "Receiving end does not exist" error
   // ============================================================
 
-  async function init() {
-    // Load saved language preference
-    const stored = await chrome.storage.local.get(['targetLanguage', 'autoTranslate']);
-    currentLang = stored.targetLanguage || 'en';
-
-    translator = new SkilljarTranslator();
-    await translator.initialize();
-
-    injectSidebar();
-    injectFloatingButton();
-
-    if (stored.autoTranslate && currentLang !== 'en') {
-      await translatePage(currentLang);
-    }
-
-    // Listen for messages from popup
-    chrome.runtime.onMessage.addListener(handleMessage);
-
-    // Observe DOM changes for dynamic content
-    observeDOM();
-
-    console.log('[Skilljar i18n] Content script initialized');
-  }
-
-  // ============================================================
-  // MESSAGE HANDLING
-  // ============================================================
+  chrome.runtime.onMessage.addListener(handleMessage);
+  console.log('[Skilljar i18n] Message listener registered');
 
   function handleMessage(request, sender, sendResponse) {
+    // If translator isn't ready yet, queue the action
+    if (!isReady && request.action === 'translatePage') {
+      pendingActions.push({ request, sendResponse });
+      sendResponse({ success: true, queued: true });
+      return false;
+    }
+
     switch (request.action) {
       case 'translatePage':
-        translatePage(request.language).then(() => sendResponse({ success: true }));
-        return true;
+        translatePage(request.language).then(() => {
+          sendResponse({ success: true });
+        }).catch((err) => {
+          console.error('[Skilljar i18n] translatePage error:', err);
+          sendResponse({ success: false, error: err.message });
+        });
+        return true; // keep channel open for async response
+
       case 'restoreOriginal':
         restoreOriginal();
         sendResponse({ success: true });
-        break;
+        return false;
+
       case 'toggleSidebar':
         toggleSidebar();
         sendResponse({ success: true });
-        break;
+        return false;
+
       case 'getPageContext':
         sendResponse({ context: getPageContext() });
-        break;
+        return false;
+
       case 'setLanguage':
         currentLang = request.language;
         chrome.storage.local.set({ targetLanguage: request.language });
         sendResponse({ success: true });
-        break;
+        return false;
+
+      case 'ping':
+        sendResponse({ ready: isReady });
+        return false;
+
+      default:
+        sendResponse({ success: false, error: 'Unknown action' });
+        return false;
+    }
+  }
+
+  // ============================================================
+  // INITIALIZATION (async, but message listener is already active)
+  // ============================================================
+
+  async function init() {
+    try {
+      const stored = await chrome.storage.local.get(['targetLanguage', 'autoTranslate']);
+      currentLang = stored.targetLanguage || 'en';
+
+      translator = new SkilljarTranslator();
+      const bridgeOk = await translator.initialize();
+
+      if (!bridgeOk) {
+        console.warn('[Skilljar i18n] Bridge failed to initialize, features limited');
+      }
+
+      injectSidebar();
+      injectFloatingButton();
+      isReady = true;
+
+      console.log('[Skilljar i18n] Content script ready');
+
+      // Process any queued actions from popup
+      for (const { request } of pendingActions) {
+        if (request.action === 'translatePage') {
+          await translatePage(request.language);
+        }
+      }
+      pendingActions = [];
+
+      // Auto-translate if enabled
+      if (stored.autoTranslate && currentLang !== 'en' && bridgeOk) {
+        await translatePage(currentLang);
+      }
+
+      // Observe DOM changes
+      observeDOM();
+    } catch (err) {
+      console.error('[Skilljar i18n] Init error:', err);
+      // Still mark as ready so sidebar/button work
+      isReady = true;
+      injectSidebar();
+      injectFloatingButton();
     }
   }
 
@@ -91,6 +139,14 @@
 
   async function translatePage(targetLang) {
     if (isTranslating) return;
+    if (!translator || !translator.isReady) {
+      console.warn('[Skilljar i18n] Translator not ready');
+      updateProgressText('AI engine loading... please wait and retry');
+      showProgress(true);
+      setTimeout(() => showProgress(false), 3000);
+      return;
+    }
+
     isTranslating = true;
     currentLang = targetLang;
 
@@ -100,6 +156,14 @@
     try {
       const elements = getTranslatableElements();
       const total = elements.length;
+
+      if (total === 0) {
+        updateProgressText('No translatable content found on this page.');
+        setTimeout(() => showProgress(false), 3000);
+        isTranslating = false;
+        return;
+      }
+
       let completed = 0;
 
       for (const el of elements) {
@@ -110,21 +174,27 @@
           originalTexts.set(el, el.innerHTML);
         }
 
-        // Only translate text nodes, preserve HTML structure
+        // Translate text nodes, preserve HTML structure
         const textNodes = getTextNodes(el);
         for (const node of textNodes) {
           const original = node.textContent.trim();
           if (original.length < 2) continue;
           if (isCodeContent(node)) continue;
 
-          const translated = await translator.translate(original, targetLang);
-          if (translated !== original) {
-            node.textContent = translated;
+          try {
+            const translated = await translator.translate(original, targetLang);
+            if (translated && translated !== original) {
+              node.textContent = translated;
+            }
+          } catch (e) {
+            // Skip individual failures, continue with rest
+            console.warn('[Skilljar i18n] Skipping node:', e.message);
           }
         }
 
         completed++;
-        updateProgressText(`Translating... ${Math.round((completed / total) * 100)}%`);
+        const pct = Math.round((completed / total) * 100);
+        updateProgressText(`Translating... ${pct}%`);
         updateProgressBar(completed / total);
       }
 
@@ -132,8 +202,8 @@
       setTimeout(() => showProgress(false), 2000);
     } catch (err) {
       console.error('[Skilljar i18n] Translation error:', err);
-      updateProgressText('Translation error. Please try again.');
-      setTimeout(() => showProgress(false), 3000);
+      updateProgressText('Translation error: ' + err.message);
+      setTimeout(() => showProgress(false), 4000);
     } finally {
       isTranslating = false;
     }
@@ -157,14 +227,18 @@
       SELECTORS.listItems,
       SELECTORS.sidebarItems,
       SELECTORS.quizContent,
+      SELECTORS.generic,
     ].join(', ');
 
     const elements = Array.from(document.querySelectorAll(allSelectors));
-    const exclude = SELECTORS.excludeSelectors;
 
     return elements.filter(el => {
-      if (el.closest(exclude)) return false;
+      // Skip our own UI
       if (el.closest('.skilljar-i18n-sidebar')) return false;
+      if (el.closest('#skilljar-i18n-bridge')) return false;
+      if (el.closest('#skilljar-i18n-fab')) return false;
+      // Skip code/script
+      if (el.closest('code, pre, script, style')) return false;
       return el.textContent.trim().length > 1;
     });
   }
@@ -196,7 +270,7 @@
   }
 
   function getPageContext() {
-    const title = document.querySelector(SELECTORS.courseTitle)?.textContent || '';
+    const title = document.querySelector(SELECTORS.courseTitle)?.textContent || document.title || '';
     const headings = Array.from(document.querySelectorAll(SELECTORS.headings))
       .map(h => h.textContent.trim())
       .slice(0, 5)
@@ -205,18 +279,19 @@
   }
 
   // ============================================================
-  // DOM OBSERVER (for dynamically loaded content)
+  // DOM OBSERVER
   // ============================================================
 
   function observeDOM() {
     const observer = new MutationObserver((mutations) => {
       if (currentLang === 'en' || isTranslating) return;
+      if (!translator || !translator.isReady) return;
 
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
-          if (node.nodeType === Node.ELEMENT_NODE && !node.closest('.skilljar-i18n-sidebar')) {
-            // New content added, could auto-translate
-            // Debounced to avoid excessive calls
+          if (node.nodeType === Node.ELEMENT_NODE &&
+              !node.closest('.skilljar-i18n-sidebar') &&
+              !node.closest('#skilljar-i18n-bridge')) {
             debounceTranslateNew(node);
           }
         }
@@ -229,17 +304,18 @@
   let translateTimeout;
   function debounceTranslateNew(node) {
     clearTimeout(translateTimeout);
-    translateTimeout = setTimeout(() => {
-      // Auto-translate newly loaded content if a language is active
-      if (currentLang !== 'en') {
+    translateTimeout = setTimeout(async () => {
+      if (currentLang !== 'en' && translator?.isReady) {
         const textNodes = getTextNodes(node);
-        textNodes.forEach(async (tn) => {
+        for (const tn of textNodes) {
           const original = tn.textContent.trim();
           if (original.length >= 2 && !isCodeContent(tn)) {
-            const translated = await translator.translate(original, currentLang);
-            if (translated !== original) tn.textContent = translated;
+            try {
+              const translated = await translator.translate(original, currentLang);
+              if (translated && translated !== original) tn.textContent = translated;
+            } catch (e) { /* skip */ }
           }
-        });
+        }
       }
     }, 1000);
   }
@@ -249,6 +325,7 @@
   // ============================================================
 
   function injectFloatingButton() {
+    if (document.getElementById('skilljar-i18n-fab')) return;
     const btn = document.createElement('div');
     btn.id = 'skilljar-i18n-fab';
     btn.innerHTML = `
@@ -267,13 +344,12 @@
   // ============================================================
 
   function injectSidebar() {
+    if (document.getElementById('skilljar-i18n-sidebar')) return;
     const sidebar = document.createElement('div');
     sidebar.id = 'skilljar-i18n-sidebar';
     sidebar.className = 'skilljar-i18n-sidebar';
     sidebar.innerHTML = getSidebarHTML();
     document.body.appendChild(sidebar);
-
-    // Event listeners
     setTimeout(bindSidebarEvents, 100);
   }
 
@@ -295,7 +371,6 @@
         <button class="si18n-tab" data-tab="chat">AI Tutor</button>
       </div>
 
-      <!-- TRANSLATE TAB -->
       <div class="si18n-panel" id="si18n-panel-translate">
         <div class="si18n-section">
           <label class="si18n-label">Target Language</label>
@@ -343,13 +418,12 @@
         </div>
       </div>
 
-      <!-- CHAT TAB -->
       <div class="si18n-panel" id="si18n-panel-chat" style="display:none">
         <div class="si18n-chat-messages" id="si18n-chat-messages">
           <div class="si18n-chat-msg si18n-chat-bot">
             <div class="si18n-chat-avatar">AI</div>
             <div class="si18n-chat-bubble">
-              Hi! I'm your AI learning assistant. Ask me anything about this course — I'll answer in your preferred language. Powered by GLM-4 Flash via Puter.js (free, no API key needed).
+              Hi! I'm your AI learning assistant. Ask me anything about this course. Powered by GLM-4 Flash via Puter.js (free, no API key).
             </div>
           </div>
         </div>
@@ -372,10 +446,8 @@
   }
 
   function bindSidebarEvents() {
-    // Close button
     document.getElementById('si18n-close')?.addEventListener('click', toggleSidebar);
 
-    // Tabs
     document.querySelectorAll('.si18n-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         document.querySelectorAll('.si18n-tab').forEach(t => t.classList.remove('active'));
@@ -385,7 +457,6 @@
       });
     });
 
-    // Language select
     const langSelect = document.getElementById('si18n-lang-select');
     if (langSelect) {
       langSelect.value = currentLang;
@@ -395,7 +466,6 @@
       });
     }
 
-    // Translate button
     document.getElementById('si18n-translate-btn')?.addEventListener('click', async () => {
       const lang = document.getElementById('si18n-lang-select').value;
       if (lang === 'en') {
@@ -405,10 +475,8 @@
       }
     });
 
-    // Restore button
     document.getElementById('si18n-restore-btn')?.addEventListener('click', restoreOriginal);
 
-    // Auto-translate toggle
     const autoToggle = document.getElementById('si18n-auto-translate');
     chrome.storage.local.get(['autoTranslate'], (result) => {
       if (autoToggle) autoToggle.checked = result.autoTranslate || false;
@@ -417,11 +485,8 @@
       chrome.storage.local.set({ autoTranslate: e.target.checked });
     });
 
-    // Chat input
     const chatInput = document.getElementById('si18n-chat-input');
-    const chatSend = document.getElementById('si18n-chat-send');
-
-    chatSend?.addEventListener('click', sendChatMessage);
+    document.getElementById('si18n-chat-send')?.addEventListener('click', sendChatMessage);
     chatInput?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -440,7 +505,6 @@
     const text = input.value.trim();
     if (!text) return;
 
-    // User message
     messages.innerHTML += `
       <div class="si18n-chat-msg si18n-chat-user">
         <div class="si18n-chat-bubble">${escapeHtml(text)}</div>
@@ -449,7 +513,6 @@
     `;
     input.value = '';
 
-    // Loading indicator
     const loadingId = 'loading-' + Date.now();
     messages.innerHTML += `
       <div class="si18n-chat-msg si18n-chat-bot" id="${loadingId}">
@@ -459,11 +522,9 @@
     `;
     messages.scrollTop = messages.scrollHeight;
 
-    // Get AI response
     const context = getPageContext();
     const response = await translator.chat(text, currentLang, context);
 
-    // Replace loading with response
     const loadingEl = document.getElementById(loadingId);
     if (loadingEl) {
       loadingEl.querySelector('.si18n-chat-bubble').innerHTML = formatResponse(response);
@@ -479,7 +540,6 @@
   }
 
   function formatResponse(text) {
-    // Basic markdown-like formatting
     return text
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
@@ -514,8 +574,8 @@
     const sidebar = document.getElementById('skilljar-i18n-sidebar');
     const fab = document.getElementById('skilljar-i18n-fab');
     sidebarVisible = !sidebarVisible;
-    sidebar.classList.toggle('open', sidebarVisible);
-    fab.classList.toggle('hidden', sidebarVisible);
+    if (sidebar) sidebar.classList.toggle('open', sidebarVisible);
+    if (fab) fab.classList.toggle('hidden', sidebarVisible);
   }
 
   // ============================================================
