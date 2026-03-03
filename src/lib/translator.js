@@ -1,7 +1,7 @@
 /**
  * Skilljar i18n Assistant - AI Translation Engine
  * Uses a bridge iframe to load Puter.js (bypasses Chrome extension CSP)
- * Communicates via postMessage with the sandboxed bridge page
+ * The bridge.html is a web_accessible_resource that can load external scripts
  *
  * Copyright respecting: translates on-the-fly only, never stores or redistributes original content
  */
@@ -14,7 +14,7 @@ class SkilljarTranslator {
     this.pendingCallbacks = new Map();
     this.requestId = 0;
     this.bridgeIframe = null;
-    this.rateLimitDelay = 300;
+    this.rateLimitDelay = 400;
     this.lastRequestTime = 0;
     this.supportedLanguages = {
       'ko': '한국어',
@@ -37,7 +37,10 @@ class SkilljarTranslator {
 
   async initialize() {
     try {
+      // Set up the global message listener ONCE
+      this._setupMessageListener();
       await this._createBridge();
+      console.log('[Skilljar i18n] Translator initialized successfully');
       return true;
     } catch (err) {
       console.error('[Skilljar i18n] Failed to initialize translator:', err);
@@ -46,50 +49,91 @@ class SkilljarTranslator {
   }
 
   /**
-   * Creates a hidden iframe that loads bridge.html (sandboxed page).
-   * bridge.html loads Puter.js externally, which is allowed in sandbox context.
-   * Communication happens via postMessage.
+   * Single global message listener for all bridge responses
+   */
+  _setupMessageListener() {
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+      if (!data || !data.type) return;
+
+      if (data.type === 'PUTER_BRIDGE_READY') {
+        console.log('[Skilljar i18n] Received PUTER_BRIDGE_READY');
+        this.isReady = true;
+        if (this._bridgeReadyResolve) {
+          this._bridgeReadyResolve();
+          this._bridgeReadyResolve = null;
+        }
+      }
+
+      if (data.type === 'PUTER_BRIDGE_ERROR') {
+        console.error('[Skilljar i18n] Bridge error:', data.error);
+        if (this._bridgeReadyReject) {
+          this._bridgeReadyReject(new Error(data.error));
+          this._bridgeReadyReject = null;
+        }
+      }
+
+      if (data.type === 'TRANSLATE_RESPONSE' || data.type === 'CHAT_RESPONSE') {
+        const cb = this.pendingCallbacks.get(data.id);
+        if (cb) {
+          this.pendingCallbacks.delete(data.id);
+          cb(data);
+        }
+      }
+    });
+  }
+
+  /**
+   * Creates a hidden iframe that loads bridge.html
+   * bridge.html is a web_accessible_resource that can load Puter.js externally
+   * No sandbox attribute - let it run with full capabilities
    */
   _createBridge() {
     return new Promise((resolve, reject) => {
+      this._bridgeReadyResolve = resolve;
+      this._bridgeReadyReject = reject;
+
+      const bridgeUrl = chrome.runtime.getURL('src/bridge/bridge.html');
+      console.log('[Skilljar i18n] Loading bridge from:', bridgeUrl);
+
       const iframe = document.createElement('iframe');
-      iframe.src = chrome.runtime.getURL('src/bridge/bridge.html');
-      iframe.style.cssText = 'display:none !important;width:0;height:0;border:none;position:fixed;top:-9999px;left:-9999px;pointer-events:none;';
+      iframe.src = bridgeUrl;
       iframe.id = 'skilljar-i18n-bridge';
-      iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+      // Hidden but still functional - NO sandbox attribute
+      iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;pointer-events:none;';
+      // Allow the iframe to load scripts
+      iframe.allow = 'scripts';
 
+      this.bridgeIframe = iframe;
+
+      // Timeout after 20 seconds
       const timeout = setTimeout(() => {
-        console.warn('[Skilljar i18n] Bridge timeout - removing listener');
-        window.removeEventListener('message', onMessage);
-        reject(new Error('Bridge initialization timed out (15s). Puter.js may be blocked.'));
-      }, 15000);
+        console.warn('[Skilljar i18n] Bridge timed out after 20s');
+        this._bridgeReadyResolve = null;
+        this._bridgeReadyReject = null;
+        reject(new Error('Bridge timed out. Check if Puter.js is accessible.'));
+      }, 20000);
 
-      const onMessage = (event) => {
-        if (event.data?.type === 'PUTER_BRIDGE_READY') {
-          clearTimeout(timeout);
-          this.isReady = true;
-          this.bridgeIframe = iframe;
-          console.log('[Skilljar i18n] Bridge connected, Puter.js ready');
-          resolve();
-          // Keep listening for responses (don't remove)
-        }
-        if (event.data?.type === 'PUTER_BRIDGE_ERROR') {
-          clearTimeout(timeout);
-          window.removeEventListener('message', onMessage);
-          reject(new Error(event.data.error));
-        }
-        // Handle translation/chat responses
-        if (event.data?.type === 'TRANSLATE_RESPONSE' || event.data?.type === 'CHAT_RESPONSE') {
-          const cb = this.pendingCallbacks.get(event.data.id);
-          if (cb) {
-            this.pendingCallbacks.delete(event.data.id);
-            cb(event.data);
-          }
-        }
+      // Clear timeout when resolved/rejected
+      const origResolve = resolve;
+      const origReject = reject;
+      this._bridgeReadyResolve = () => {
+        clearTimeout(timeout);
+        origResolve();
+      };
+      this._bridgeReadyReject = (err) => {
+        clearTimeout(timeout);
+        origReject(err);
       };
 
-      window.addEventListener('message', onMessage);
-      document.body.appendChild(iframe);
+      // Handle iframe load errors
+      iframe.onerror = () => {
+        clearTimeout(timeout);
+        reject(new Error('Bridge iframe failed to load'));
+      };
+
+      document.documentElement.appendChild(iframe);
+      console.log('[Skilljar i18n] Bridge iframe appended to page');
     });
   }
 
@@ -98,8 +142,12 @@ class SkilljarTranslator {
    */
   _sendToBridge(message) {
     return new Promise((resolve, reject) => {
-      if (!this.bridgeIframe || !this.isReady) {
-        reject(new Error('Bridge not initialized'));
+      if (!this.bridgeIframe) {
+        reject(new Error('Bridge not created'));
+        return;
+      }
+      if (!this.isReady) {
+        reject(new Error('Bridge not ready'));
         return;
       }
 
@@ -108,20 +156,23 @@ class SkilljarTranslator {
 
       const timeout = setTimeout(() => {
         this.pendingCallbacks.delete(id);
-        reject(new Error('Request timed out (30s)'));
+        console.warn('[Skilljar i18n] Request', id, 'timed out');
+        resolve(message.text || message.userMessage || 'Translation timed out');
       }, 30000);
 
       this.pendingCallbacks.set(id, (response) => {
         clearTimeout(timeout);
-        if (response.success) {
-          resolve(response.result);
-        } else {
-          console.warn('[Skilljar i18n] Bridge error:', response.error);
-          resolve(response.result); // fallback text
-        }
+        resolve(response.result);
       });
 
-      this.bridgeIframe.contentWindow.postMessage(message, '*');
+      try {
+        this.bridgeIframe.contentWindow.postMessage(message, '*');
+      } catch (e) {
+        clearTimeout(timeout);
+        this.pendingCallbacks.delete(id);
+        console.error('[Skilljar i18n] postMessage failed:', e);
+        resolve(message.text || message.userMessage || 'Error');
+      }
     });
   }
 
@@ -133,7 +184,6 @@ class SkilljarTranslator {
     if (!text || !text.trim()) return text;
     if (targetLang === 'en') return text;
 
-    // Check cache first
     const cacheKey = this.getCacheKey(text, targetLang);
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey);
@@ -166,7 +216,7 @@ Return ONLY the translated text, nothing else.`;
         model: 'glm-4-flash',
       });
 
-      // Cache result
+      // Cache
       if (this.cache.size >= this.maxCacheSize) {
         const firstKey = this.cache.keys().next().value;
         this.cache.delete(firstKey);
@@ -176,16 +226,8 @@ Return ONLY the translated text, nothing else.`;
       return translated;
     } catch (err) {
       console.error('[Skilljar i18n] Translation error:', err);
-      return text; // fallback: original
+      return text;
     }
-  }
-
-  async translateBatch(texts, targetLang) {
-    const results = [];
-    for (const text of texts) {
-      results.push(await this.translate(text, targetLang));
-    }
-    return results;
   }
 
   async chat(userMessage, targetLang, courseContext = '') {
@@ -217,7 +259,6 @@ ${courseContext ? `Current course context: ${courseContext}` : ''}`;
   }
 }
 
-// Export for use in content script
 if (typeof window !== 'undefined') {
   window.SkilljarTranslator = SkilljarTranslator;
 }
