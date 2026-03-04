@@ -23,7 +23,8 @@
    to convey visual authority without changing font family.
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Sans+SC:wght@400;500;700;900&family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Sans+Arabic:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Sans+Thai:wght@400;500;700&display=swap');
+/* NOTE: @import removed — fonts loaded via <link> tag in content.js
+   to avoid Chrome extension CSP blocking of @import in content scripts */
 
 /* ---- Korean ---- */
 
@@ -34,8 +35,13 @@ body.si18n-lang-ko,
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
 }
 
-/* Headings — Black weight (900) to match Copernicus Bold's visual punch */
-.si18n-lang-ko h1, .si18n-lang-ko h2 {
+/* Headings — Black weight (900) to match Copernicus Bold's visual punch.
+   Target both standard h-tags AND Skilljar's custom heading classes/elements. */
+.si18n-lang-ko h1, .si18n-lang-ko h2,
+.si18n-lang-ko [class*="heading"], .si18n-lang-ko [class*="Heading"],
+.si18n-lang-ko [class*="title"] > strong, .si18n-lang-ko [class*="Title"],
+.si18n-lang-ko .lesson-content h1, .si18n-lang-ko .lesson-content h2,
+.si18n-lang-ko .course-description h1, .si18n-lang-ko .course-description h2 {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
   font-weight: 900 !important;
   letter-spacing: -0.03em;
@@ -48,15 +54,24 @@ body.si18n-lang-ko,
   letter-spacing: -0.02em;
 }
 
-/* Course titles, section titles */
+/* Course titles, section titles, lesson headings */
 .si18n-lang-ko .coursebox-text,
 .si18n-lang-ko .section-title,
 .si18n-lang-ko .lesson-top h2,
+.si18n-lang-ko .lesson-content h2,
+.si18n-lang-ko .lesson-content h3,
 .si18n-lang-ko .details-pane-description h2,
-.si18n-lang-ko .details-pane-description h3 {
+.si18n-lang-ko .details-pane-description h3,
+.si18n-lang-ko .lesson-content strong {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
   font-weight: 900 !important;
   letter-spacing: -0.03em;
+}
+
+/* Ensure all bold text in Korean gets proper font rendering */
+.si18n-lang-ko strong, .si18n-lang-ko b {
+  font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
+  font-weight: 700 !important;
 }
 
 /* Nav, links, buttons, UI text */

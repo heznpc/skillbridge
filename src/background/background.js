@@ -42,15 +42,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       fetchOpts.method = 'POST';
       fetchOpts.body = msg.body;
       headers['Content-Type'] = 'application/json';
+      // InnerTube API needs origin + client headers
+      if (msg.url.includes('youtubei')) {
+        headers['Origin'] = 'https://www.youtube.com';
+        headers['Referer'] = 'https://www.youtube.com/';
+        headers['X-Youtube-Client-Name'] = '1';
+        headers['X-Youtube-Client-Version'] = '2.20240101.00.00';
+      }
     }
     fetchOpts.headers = headers;
+    console.log(`[SkillBridge BG] FETCH: ${msg.method || 'GET'} ${msg.url.substring(0, 80)}`);
     fetch(msg.url, fetchOpts)
       .then(resp => {
+        console.log(`[SkillBridge BG] ${resp.status} ${msg.url.substring(0, 60)}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         return resp.text();
       })
       .then(text => sendResponse({ ok: true, data: text }))
-      .catch(err => sendResponse({ ok: false, error: err.message }));
+      .catch(err => {
+        console.error(`[SkillBridge BG] Error: ${err.message}`);
+        sendResponse({ ok: false, error: err.message });
+      });
     return true;
   }
 

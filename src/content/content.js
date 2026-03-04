@@ -440,6 +440,20 @@
   }
 
   /**
+   * Inject Google Fonts via <link> tag (more reliable than @import in content scripts).
+   * Chrome extension CSS @import can be blocked by page CSP.
+   */
+  function injectGoogleFonts() {
+    if (document.getElementById('sb-google-fonts')) return;
+    const link = document.createElement('link');
+    link.id = 'sb-google-fonts';
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Sans+SC:wght@400;500;700;900&family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Sans+Arabic:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Sans+Thai:wght@400;500;700&display=swap';
+    document.head.appendChild(link);
+    console.log('[SkillBridge] Google Fonts injected via <link>');
+  }
+
+  /**
    * Apply/remove language-specific CSS class on body for font fallbacks.
    * Classes like .si18n-lang-ko trigger Noto Sans KR, etc.
    */
@@ -453,6 +467,7 @@
     // Add new language class (unless English)
     if (lang && lang !== 'en') {
       body.classList.add(`si18n-lang-${lang}`);
+      injectGoogleFonts();
     }
   }
 
