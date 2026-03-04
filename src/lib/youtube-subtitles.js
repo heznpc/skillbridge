@@ -145,81 +145,153 @@ class YouTubeSubtitleManager {
   _getVideoId(iframe) {
     try {
       const url = new URL(iframe.src);
-      const parts = url.pathname.split('/');
-      return parts[parts.length - 1];
+      // pathname is like /embed/VIDEO_ID — get last segment, strip any params
+      const parts = url.pathname.split('/').filter(Boolean);
+      const raw = parts[parts.length - 1] || '';
+      // Clean: remove query fragments that might be stuck
+      return raw.split('?')[0].split('&')[0] || null;
     } catch { return null; }
   }
 
   /**
-   * Fetch English captions from YouTube's timedtext API via background proxy.
+   * Fetch English captions from YouTube.
+   * Strategy: Try page scrape first, fall back to timedtext direct URL.
    */
   async _fetchCaptions(videoId) {
+    // Method 1: Scrape the YouTube watch page for captionTracks
+    const tracks = await this._scrapeCaptionTracks(videoId);
+    if (tracks) {
+      const captions = await this._fetchFromTrack(tracks);
+      if (captions) return captions;
+    }
+
+    // Method 2: Direct timedtext API (works for some auto-generated captions)
+    const directCaptions = await this._fetchTimedTextDirect(videoId);
+    if (directCaptions) return directCaptions;
+
+    console.log('[SkillBridge] All caption fetch methods failed for', videoId);
+    return null;
+  }
+
+  /**
+   * Method 1: Scrape YouTube page for caption track URLs.
+   */
+  async _scrapeCaptionTracks(videoId) {
     try {
       const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
       const pageResp = await new Promise((resolve) => {
         chrome.runtime.sendMessage({ type: 'FETCH_URL', url: pageUrl }, resolve);
       });
 
-      if (!pageResp?.ok) return null;
+      if (!pageResp?.ok) {
+        console.log('[SkillBridge] YouTube page fetch failed:', pageResp?.error);
+        return null;
+      }
 
-      // Extract caption track info from page data (try multiple patterns)
+      // Try multiple regex patterns — YouTube changes their page structure
       const patterns = [
-        /"captionTracks":\s*(\[.*?\])\s*[,}]/,
-        /captionTracks\\?":\s*(\[.*?\])/,
-        /"captions":\s*\{.*?"captionTracks":\s*(\[.*?\])/s,
+        /"captionTracks":(\[.*?\])(?=,")/,
+        /"captionTracks":\s*(\[.+?\])\s*[,}]/,
+        /captionTracks\\?":\s*(\[.+?\])/,
       ];
-      let captionMatch = null;
+
+      let rawJson = null;
       for (const pat of patterns) {
-        captionMatch = pageResp.data.match(pat);
-        if (captionMatch) break;
+        const m = pageResp.data.match(pat);
+        if (m) { rawJson = m[1]; break; }
       }
-      if (!captionMatch) {
-        console.log('[SkillBridge] No caption tracks found for video', videoId);
+
+      if (!rawJson) {
+        console.log('[SkillBridge] No captionTracks in page data');
         return null;
       }
 
-      // Clean up escaped JSON if needed
-      let rawJson = captionMatch[1];
-      if (rawJson.includes('\\u0026')) {
-        rawJson = rawJson.replace(/\\u0026/g, '&');
-      }
-      if (rawJson.includes('\\"')) {
-        rawJson = rawJson.replace(/\\"/g, '"');
-      }
+      // Clean escaped characters
+      rawJson = rawJson
+        .replace(/\\u0026/g, '&')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
 
-      let tracks;
-      try { tracks = JSON.parse(rawJson); } catch {
-        console.warn('[SkillBridge] Failed to parse caption tracks JSON');
-        return null;
-      }
+      const tracks = JSON.parse(rawJson);
+      if (!Array.isArray(tracks) || tracks.length === 0) return null;
 
-      // Prefer manual English captions, fall back to auto-generated or first track
-      const enTrack = tracks.find(t => t.languageCode === 'en' && !t.kind) ||
-                      tracks.find(t => t.languageCode === 'en') ||
-                      tracks[0];
+      // Prefer: manual English > auto English > any first track
+      return tracks.find(t => t.languageCode === 'en' && t.kind !== 'asr') ||
+             tracks.find(t => t.languageCode === 'en') ||
+             tracks[0];
+    } catch (err) {
+      console.warn('[SkillBridge] Caption track scrape failed:', err);
+      return null;
+    }
+  }
 
-      if (!enTrack?.baseUrl) return null;
-
-      // Fetch caption data in JSON3 format
-      const captionUrl = enTrack.baseUrl + '&fmt=json3';
-      const captionResp = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: 'FETCH_URL', url: captionUrl }, resolve);
+  /**
+   * Fetch captions from a track's baseUrl in json3 format.
+   */
+  async _fetchFromTrack(track) {
+    if (!track?.baseUrl) return null;
+    try {
+      const url = track.baseUrl + (track.baseUrl.includes('?') ? '&' : '?') + 'fmt=json3';
+      const resp = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'FETCH_URL', url }, resolve);
       });
+      if (!resp?.ok) return null;
+      return this._parseJson3(resp.data);
+    } catch (err) {
+      console.warn('[SkillBridge] Track fetch failed:', err);
+      return null;
+    }
+  }
 
-      if (!captionResp?.ok) return null;
+  /**
+   * Method 2: Direct timedtext API — works for videos with auto-generated captions.
+   */
+  async _fetchTimedTextDirect(videoId) {
+    try {
+      // Try auto-generated English captions directly
+      const url = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&kind=asr&fmt=json3`;
+      const resp = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'FETCH_URL', url }, resolve);
+      });
+      if (resp?.ok) {
+        const captions = this._parseJson3(resp.data);
+        if (captions) return captions;
+      }
 
-      const data = JSON.parse(captionResp.data);
-      if (!data.events) return null;
+      // Try manual English captions
+      const url2 = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&fmt=json3`;
+      const resp2 = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ type: 'FETCH_URL', url: url2 }, resolve);
+      });
+      if (resp2?.ok) {
+        return this._parseJson3(resp2.data);
+      }
 
-      return data.events
+      return null;
+    } catch (err) {
+      console.warn('[SkillBridge] Direct timedtext failed:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Parse YouTube json3 caption format into our array format.
+   */
+  _parseJson3(rawData) {
+    try {
+      const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      if (!data?.events) return null;
+
+      const captions = data.events
         .filter(e => e.segs && e.segs.length > 0)
         .map(e => ({
           start: Math.floor((e.tStartMs || 0) / 1000),
           text: e.segs.map(s => s.utf8 || '').join('').trim()
         }))
         .filter(e => e.text.length > 0);
-    } catch (err) {
-      console.warn('[SkillBridge] Caption fetch failed:', err);
+
+      return captions.length > 0 ? captions : null;
+    } catch {
       return null;
     }
   }

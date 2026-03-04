@@ -12,21 +12,48 @@
    and use :lang() selectors to apply proper font stacks.
    ============================================================ */
 
+/* ============================================================
+   Font Strategy:
+   Skilljar uses Copernicus (serif headings), Tiempos (serif body),
+   Styrene B (UI links), Open Sans (small UI) — all Latin-only.
+
+   For CJK: Noto Sans {script} across the board.
+   Korean serif (명조체) looks dated/academic on screen, not premium.
+   Instead we differentiate headings via weight (700) + tight tracking
+   to convey visual authority without changing font family.
+   ============================================================ */
+
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Sans+Arabic:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Sans+Thai:wght@400;500;700&display=swap');
 
-/* Korean */
+/* ---- Korean ---- */
+
+/* All text — Noto Sans KR for clean, modern feel */
 [lang="ko"] body,
 body.si18n-lang-ko,
 .si18n-lang-ko {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
 }
+
+/* Headings — heavier weight + tight tracking to match Copernicus's visual authority */
 .si18n-lang-ko h1, .si18n-lang-ko h2, .si18n-lang-ko h3,
-.si18n-lang-ko h4, .si18n-lang-ko h5, .si18n-lang-ko h6,
-.si18n-lang-ko .coursebox-text, .si18n-lang-ko .section-title {
+.si18n-lang-ko h4, .si18n-lang-ko h5, .si18n-lang-ko h6 {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
-/* Skilljar tab links, nav items, breadcrumbs — override Styrene B (Latin-only) */
+
+/* Course titles, section titles */
+.si18n-lang-ko .coursebox-text,
+.si18n-lang-ko .section-title,
+.si18n-lang-ko .lesson-top h2,
+.si18n-lang-ko .details-pane-description h2,
+.si18n-lang-ko .details-pane-description h3 {
+  font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Nav, links, buttons, UI text */
 .si18n-lang-ko .focus-link-v2,
 .si18n-lang-ko .sj-tab-text,
 .si18n-lang-ko .sj-breadcrumb,
@@ -39,59 +66,72 @@ body.si18n-lang-ko,
 .si18n-lang-ko button,
 .si18n-lang-ko a {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
+  font-weight: 500;
 }
-/* Fix tab text rendering — Skilljar uses Styrene B with tight letter-spacing */
+
 .si18n-lang-ko .focus-link-v2 {
   letter-spacing: -0.02em;
   font-weight: 500;
 }
 
-/* Japanese */
+/* ---- Japanese ---- */
+
 .si18n-lang-ja {
   font-family: "Noto Sans JP", "Hiragino Kaku Gothic Pro", "Yu Gothic", "Meiryo", sans-serif !important;
 }
 .si18n-lang-ja h1, .si18n-lang-ja h2, .si18n-lang-ja h3,
 .si18n-lang-ja h4, .si18n-lang-ja h5, .si18n-lang-ja h6 {
-  font-family: "Noto Sans JP", "Hiragino Kaku Gothic Pro", "Yu Gothic", sans-serif !important;
+  font-family: "Noto Sans JP", "Hiragino Kaku Gothic Pro", "Yu Gothic", "Meiryo", sans-serif !important;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
-/* Chinese Simplified */
+/* ---- Chinese Simplified ---- */
+
 .si18n-lang-zh-CN {
   font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif !important;
 }
-.si18n-lang-zh-CN h1, .si18n-lang-zh-CN h2, .si18n-lang-zh-CN h3 {
+.si18n-lang-zh-CN h1, .si18n-lang-zh-CN h2, .si18n-lang-zh-CN h3,
+.si18n-lang-zh-CN h4, .si18n-lang-zh-CN h5, .si18n-lang-zh-CN h6 {
   font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif !important;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
-/* Chinese Traditional */
+/* ---- Chinese Traditional ---- */
+
 .si18n-lang-zh-TW {
   font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif !important;
 }
-.si18n-lang-zh-TW h1, .si18n-lang-zh-TW h2, .si18n-lang-zh-TW h3 {
+.si18n-lang-zh-TW h1, .si18n-lang-zh-TW h2, .si18n-lang-zh-TW h3,
+.si18n-lang-zh-TW h4, .si18n-lang-zh-TW h5, .si18n-lang-zh-TW h6 {
   font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif !important;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
-/* Arabic (RTL support) */
+/* ---- Arabic (RTL support) ---- */
+
 .si18n-lang-ar {
   font-family: "Noto Sans Arabic", "Segoe UI", "Tahoma", sans-serif !important;
   direction: rtl;
   text-align: right;
 }
 
-/* Hindi/Devanagari */
+/* ---- Hindi/Devanagari ---- */
+
 .si18n-lang-hi {
   font-family: "Noto Sans Devanagari", "Mangal", sans-serif !important;
 }
 
-/* Thai */
+/* ---- Thai ---- */
+
 .si18n-lang-th {
   font-family: "Noto Sans Thai", "Tahoma", "Leelawadee", sans-serif !important;
 }
 
-/* Vietnamese - Latin extended, system fonts are fine */
+/* ---- Vietnamese — Latin extended, system fonts fine ---- */
+
 .si18n-lang-vi {
   font-family: "Segoe UI", "Roboto", "Arial", sans-serif !important;
 }
