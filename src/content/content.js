@@ -45,7 +45,6 @@
     '.skillbridge-sidebar',
     '#skillbridge-bridge',
     '#skillbridge-fab',
-    '.sb-transcript-panel',
     'header nav',                                  // skip top header nav only
     '.site-header nav',                            // skip site header nav
     'nav.navbar',                                  // skip main navbar
@@ -448,7 +447,7 @@
     const link = document.createElement('link');
     link.id = 'sb-google-fonts';
     link.rel = 'stylesheet';
-    link.href = 'https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Sans+SC:wght@400;500;700;900&family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Sans+Arabic:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Sans+Thai:wght@400;500;700&display=swap';
+    link.href = 'https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Sans+Arabic:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Sans+Thai:wght@400;500;700&display=swap';
     document.head.appendChild(link);
     console.log('[SkillBridge] Google Fonts injected via <link>');
   }
@@ -548,8 +547,7 @@
         for (const node of mutation.addedNodes) {
           if (node.nodeType === Node.ELEMENT_NODE &&
               !node.closest('.skillbridge-sidebar') &&
-              !node.closest('#skillbridge-bridge') &&
-              !node.closest('.sb-transcript-panel')) {
+              !node.closest('#skillbridge-bridge')) {
             debounceTranslateNew(node);
           }
         }

@@ -13,14 +13,18 @@
    ============================================================ */
 
 /* ============================================================
-   Font Strategy:
-   Skilljar uses Copernicus (serif headings), Tiempos (serif body),
-   Styrene B (UI links), Open Sans (small UI) — all Latin-only.
+   Font Strategy — match Skilljar's original visual hierarchy:
 
-   For CJK: Noto Sans {script} across the board.
-   Korean serif (명조체) looks dated/academic on screen, not premium.
-   Instead we differentiate headings via weight (700) + tight tracking
-   to convey visual authority without changing font family.
+   Original English weights (Copernicus serif):
+   - h1 (page titles): ~400 weight, light/elegant
+   - h2 (section titles): ~600-700 weight, medium-bold
+   - h3+ (sub-headings): ~600 weight, medium
+   - Body: ~400 weight, regular
+   - UI/Nav: ~500 weight, medium
+
+   For CJK: Noto Sans KR — DON'T over-bold. Match the original
+   visual weight, not the CSS weight (sans-serif at 700 already
+   looks bolder than Copernicus serif at 700).
    ============================================================ */
 
 /* NOTE: @import removed — fonts loaded via <link> tag in content.js
@@ -28,71 +32,44 @@
 
 /* ---- Korean ---- */
 
-/* All text — Noto Sans KR for clean, modern feel */
+/* Base — all text uses Noto Sans KR */
 [lang="ko"] body,
 body.si18n-lang-ko,
 .si18n-lang-ko {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
 }
 
-/* Headings — Black weight (900) to match Copernicus Bold's visual punch.
-   Target both standard h-tags AND Skilljar's custom heading classes/elements. */
-.si18n-lang-ko h1, .si18n-lang-ko h2,
-.si18n-lang-ko [class*="heading"], .si18n-lang-ko [class*="Heading"],
-.si18n-lang-ko [class*="title"] > strong, .si18n-lang-ko [class*="Title"],
-.si18n-lang-ko .lesson-content h1, .si18n-lang-ko .lesson-content h2,
-.si18n-lang-ko .course-description h1, .si18n-lang-ko .course-description h2 {
+/* Page titles (h1) — Copernicus is LIGHT and elegant at h1 level.
+   Use 400 (regular) to match that airy, editorial feel. */
+.si18n-lang-ko h1 {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
-  font-weight: 900 !important;
-  letter-spacing: -0.03em;
+  font-weight: 400 !important;
+  letter-spacing: -0.02em;
 }
 
+/* Section headings (h2) — Copernicus is medium-bold here. Use 700. */
+.si18n-lang-ko h2 {
+  font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em;
+}
+
+/* Sub-headings (h3–h6) — medium weight */
 .si18n-lang-ko h3, .si18n-lang-ko h4,
 .si18n-lang-ko h5, .si18n-lang-ko h6 {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.02em;
+  font-weight: 500 !important;
+  letter-spacing: -0.01em;
 }
 
-/* Course titles, section titles, lesson headings */
-.si18n-lang-ko .coursebox-text,
-.si18n-lang-ko .section-title,
-.si18n-lang-ko .lesson-top h2,
-.si18n-lang-ko .lesson-content h2,
-.si18n-lang-ko .lesson-content h3,
-.si18n-lang-ko .details-pane-description h2,
-.si18n-lang-ko .details-pane-description h3,
-.si18n-lang-ko .lesson-content strong {
-  font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
-  font-weight: 900 !important;
-  letter-spacing: -0.03em;
-}
-
-/* Ensure all bold text in Korean gets proper font rendering */
+/* Bold text — don't over-bold, keep it natural */
 .si18n-lang-ko strong, .si18n-lang-ko b {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
-  font-weight: 700 !important;
 }
 
-/* Nav, links, buttons, UI text */
-.si18n-lang-ko .focus-link-v2,
-.si18n-lang-ko .sj-tab-text,
-.si18n-lang-ko .sj-breadcrumb,
-.si18n-lang-ko .breadcrumbs a,
-.si18n-lang-ko .left-nav a,
-.si18n-lang-ko .lesson-row .title,
-.si18n-lang-ko div.title,
-.si18n-lang-ko .course-time,
-.si18n-lang-ko .sj-ribbon-text,
-.si18n-lang-ko button,
-.si18n-lang-ko a {
+/* Nav, links, buttons, UI — matches Open Sans / Styrene B feel */
+.si18n-lang-ko a, .si18n-lang-ko button {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
-  font-weight: 500;
-}
-
-.si18n-lang-ko .focus-link-v2 {
-  letter-spacing: -0.02em;
-  font-weight: 500;
 }
 
 /* ---- Japanese ---- */
@@ -100,48 +77,24 @@ body.si18n-lang-ko,
 .si18n-lang-ja {
   font-family: "Noto Sans JP", "Hiragino Kaku Gothic Pro", "Yu Gothic", "Meiryo", sans-serif !important;
 }
-.si18n-lang-ja h1, .si18n-lang-ja h2 {
-  font-family: "Noto Sans JP", "Hiragino Kaku Gothic Pro", "Yu Gothic", "Meiryo", sans-serif !important;
-  font-weight: 900 !important;
-  letter-spacing: -0.03em;
-}
-.si18n-lang-ja h3, .si18n-lang-ja h4, .si18n-lang-ja h5, .si18n-lang-ja h6 {
-  font-family: "Noto Sans JP", "Hiragino Kaku Gothic Pro", "Yu Gothic", "Meiryo", sans-serif !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.02em;
-}
+.si18n-lang-ja h1 { font-weight: 400 !important; }
+.si18n-lang-ja h2 { font-weight: 700 !important; }
 
 /* ---- Chinese Simplified ---- */
 
 .si18n-lang-zh-CN {
   font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif !important;
 }
-.si18n-lang-zh-CN h1, .si18n-lang-zh-CN h2 {
-  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif !important;
-  font-weight: 900 !important;
-  letter-spacing: -0.03em;
-}
-.si18n-lang-zh-CN h3, .si18n-lang-zh-CN h4, .si18n-lang-zh-CN h5, .si18n-lang-zh-CN h6 {
-  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.02em;
-}
+.si18n-lang-zh-CN h1 { font-weight: 400 !important; }
+.si18n-lang-zh-CN h2 { font-weight: 700 !important; }
 
 /* ---- Chinese Traditional ---- */
 
 .si18n-lang-zh-TW {
   font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif !important;
 }
-.si18n-lang-zh-TW h1, .si18n-lang-zh-TW h2 {
-  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif !important;
-  font-weight: 900 !important;
-  letter-spacing: -0.03em;
-}
-.si18n-lang-zh-TW h3, .si18n-lang-zh-TW h4, .si18n-lang-zh-TW h5, .si18n-lang-zh-TW h6 {
-  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif !important;
-  font-weight: 700 !important;
-  letter-spacing: -0.02em;
-}
+.si18n-lang-zh-TW h1 { font-weight: 400 !important; }
+.si18n-lang-zh-TW h2 { font-weight: 700 !important; }
 
 /* ---- Arabic (RTL support) ---- */
 
@@ -508,170 +461,6 @@ body.si18n-lang-ko,
 .si18n-footer-sep {
   margin: 0 6px;
   opacity: 0.5;
-}
-
-/* ============================================================
-   YouTube Transcript Panel — Notion-style inline toggle
-   ============================================================ */
-.sb-transcript-panel {
-  margin-top: 8px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 14px;
-  color: var(--si18n-text, #1c1917);
-}
-
-/* Toggle header — looks like a Notion inline toggle block */
-.sb-transcript-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 4px;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.1s;
-  user-select: none;
-}
-
-.sb-transcript-header:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-/* Triangle toggle arrow */
-.sb-transcript-arrow {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  color: var(--si18n-text-secondary, #78716C);
-  transition: transform 0.15s ease;
-}
-
-.sb-transcript-panel.expanded .sb-transcript-arrow {
-  transform: rotate(90deg);
-}
-
-.sb-transcript-header-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--si18n-text, #1c1917);
-}
-
-.sb-transcript-header-meta {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sb-transcript-toggle-lang {
-  background: none;
-  border: 1px solid var(--si18n-border, #e7e5e4);
-  color: var(--si18n-text-secondary, #78716C);
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-  line-height: 1.4;
-}
-
-.sb-transcript-toggle-lang:hover {
-  border-color: var(--si18n-text-secondary, #78716C);
-  color: var(--si18n-text, #1c1917);
-}
-
-/* Body — hidden by default (collapsed) */
-.sb-transcript-body {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.25s ease;
-}
-
-.sb-transcript-panel.expanded .sb-transcript-body {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.sb-transcript-body::-webkit-scrollbar {
-  width: 4px;
-}
-
-.sb-transcript-body::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
-  border-radius: 4px;
-}
-
-.sb-transcript-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
-}
-
-/* Loading */
-.sb-transcript-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px 16px;
-  color: var(--si18n-text-secondary, #78716C);
-  font-size: 13px;
-}
-
-/* Empty state */
-.sb-transcript-empty {
-  padding: 16px;
-  text-align: center;
-  color: var(--si18n-text-secondary, #78716C);
-  font-size: 13px;
-}
-
-/* Transcript lines */
-.sb-transcript-lines {
-  padding: 4px 0;
-  border-top: 1px solid var(--si18n-border, #e7e5e4);
-}
-
-.sb-transcript-line {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 5px 8px 5px 24px;
-  cursor: pointer;
-  transition: background 0.1s;
-  border-radius: 3px;
-  margin: 0 4px;
-}
-
-.sb-transcript-line:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-.sb-transcript-line.active {
-  background: rgba(224, 122, 95, 0.07);
-}
-
-.sb-transcript-time {
-  flex-shrink: 0;
-  width: 34px;
-  font-size: 11px;
-  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
-  color: var(--si18n-primary, #E07A5F);
-  padding-top: 2px;
-  font-weight: 500;
-  opacity: 0.8;
-}
-
-.sb-transcript-line:hover .sb-transcript-time {
-  opacity: 1;
-}
-
-.sb-transcript-text {
-  flex: 1;
-  font-size: 13px;
-  line-height: 1.55;
-  word-break: break-word;
-  color: var(--si18n-text, #1c1917);
 }
 
 /* ============================================================

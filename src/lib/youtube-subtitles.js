@@ -1,10 +1,9 @@
 /**
- * SkillBridge - YouTube Auto-Subtitle Enabler + Transcript Panel
+ * SkillBridge — YouTube Auto-Subtitle Enabler
  *
  * Features:
  * 1. Auto-enable subtitles on YouTube embeds (cc_load_policy + postMessage)
- * 2. Auto-translate subtitles to target language
- * 3. Fetch English captions via timedtext API → translate → show transcript panel
+ * 2. Auto-translate subtitles to user's target language
  */
 
 class YouTubeSubtitleManager {
@@ -12,14 +11,15 @@ class YouTubeSubtitleManager {
     this.translator = translator;
     this.targetLang = targetLang;
     this._iframes = [];
-    this._transcriptPanels = new Map(); // iframe → panel element
   }
 
   /**
-   * Initialize: find all YouTube embeds, enable subtitles, and create transcript panels.
+   * Initialize: find all YouTube embeds and enable subtitles.
    */
   async initialize() {
-    const iframes = document.querySelectorAll('iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"]');
+    const iframes = document.querySelectorAll(
+      'iframe[src*="youtube.com/embed"], iframe[src*="youtube-nocookie.com/embed"]'
+    );
     if (iframes.length === 0) {
       console.log('[SkillBridge] No YouTube embeds found');
       return;
@@ -30,11 +30,6 @@ class YouTubeSubtitleManager {
     for (const iframe of iframes) {
       this._enableAutoSubtitles(iframe);
       this._iframes.push(iframe);
-
-      // Create transcript panel below each video
-      if (this.targetLang && this.targetLang !== 'en') {
-        this._createTranscriptPanel(iframe);
-      }
     }
   }
 
@@ -45,21 +40,11 @@ class YouTubeSubtitleManager {
     this.targetLang = newLang;
     for (const iframe of this._iframes) {
       this._enableAutoSubtitles(iframe);
-
-      if (newLang && newLang !== 'en') {
-        this._createTranscriptPanel(iframe);
-      } else {
-        this._removeTranscriptPanel(iframe);
-      }
     }
   }
 
   destroy() {
-    for (const iframe of this._iframes) {
-      this._removeTranscriptPanel(iframe);
-    }
     this._iframes = [];
-    this._transcriptPanels.clear();
   }
 
   // ==================== SUBTITLE AUTO-ENABLE ====================
@@ -86,41 +71,66 @@ class YouTubeSubtitleManager {
     return names[lang] || lang;
   }
 
+  /**
+   * Enable auto-subtitles on a YouTube embed iframe.
+   * Sets cc_load_policy=1 to force captions on, and cc_lang_pref
+   * to prefer the user's language. After iframe loads, sends
+   * postMessage commands to load the captions module and set
+   * auto-translation to the target language.
+   */
   _enableAutoSubtitles(iframe) {
-    const url = new URL(iframe.src);
-    url.searchParams.set('enablejsapi', '1');
-    url.searchParams.set('cc_load_policy', '1');
+    try {
+      const url = new URL(iframe.src);
 
-    if (this.targetLang && this.targetLang !== 'en') {
-      url.searchParams.set('cc_lang_pref', this._ytLangCode(this.targetLang));
-      url.searchParams.set('hl', this._ytLangCode(this.targetLang));
-    }
-
-    const newSrc = url.toString();
-    if (iframe.src !== newSrc) {
-      console.log(`[SkillBridge] Enabling auto-subtitles (${this.targetLang}) for YouTube embed`);
-      iframe.src = newSrc;
+      // Force captions on + enable JS API
+      url.searchParams.set('cc_load_policy', '1');
+      url.searchParams.set('enablejsapi', '1');
 
       if (this.targetLang && this.targetLang !== 'en') {
-        iframe.addEventListener('load', () => {
-          this._setAutoTranslate(iframe);
-        }, { once: true });
+        url.searchParams.set('cc_lang_pref', this._ytLangCode(this.targetLang));
+        url.searchParams.set('hl', this._ytLangCode(this.targetLang));
       }
+
+      const newSrc = url.toString();
+      if (iframe.src !== newSrc) {
+        console.log(`[SkillBridge] Enabling auto-subtitles (${this.targetLang || 'en'})`);
+        iframe.src = newSrc;
+
+        // After iframe loads, send postMessage to enable auto-translate
+        if (this.targetLang && this.targetLang !== 'en') {
+          iframe.addEventListener('load', () => {
+            this._setAutoTranslate(iframe);
+          }, { once: true });
+        }
+      }
+    } catch (err) {
+      console.warn('[SkillBridge] Failed to enable subtitles:', err);
     }
   }
 
+  /**
+   * Use YouTube IFrame API postMessage to set auto-translation.
+   * First loads the captions module, then sets the track to
+   * English with auto-translation to the target language.
+   */
   _setAutoTranslate(iframe) {
     const ytLang = this._ytLangCode(this.targetLang);
+
+    // Step 1: Load captions module (wait 2s for player to initialize)
     setTimeout(() => {
       try {
         iframe.contentWindow.postMessage(JSON.stringify({
-          event: 'command', func: 'loadModule', args: ['captions']
+          event: 'command',
+          func: 'loadModule',
+          args: ['captions']
         }), '*');
 
+        // Step 2: Set caption track with auto-translate (wait 1.5s for module)
         setTimeout(() => {
           try {
             iframe.contentWindow.postMessage(JSON.stringify({
-              event: 'command', func: 'setOption',
+              event: 'command',
+              func: 'setOption',
               args: ['captions', 'track', {
                 languageCode: 'en',
                 translationLanguage: {
@@ -129,385 +139,15 @@ class YouTubeSubtitleManager {
                 }
               }]
             }), '*');
-            console.log(`[SkillBridge] Sent auto-translate command (${ytLang})`);
+            console.log(`[SkillBridge] Auto-translate caption → ${ytLang}`);
           } catch (err) {
             console.warn('[SkillBridge] setOption failed:', err);
           }
         }, 1500);
       } catch (err) {
-        console.warn('[SkillBridge] Auto-translate setup failed:', err);
+        console.warn('[SkillBridge] loadModule failed:', err);
       }
     }, 2000);
-  }
-
-  // ==================== TRANSCRIPT PANEL ====================
-
-  _getVideoId(iframe) {
-    try {
-      const url = new URL(iframe.src);
-      // pathname is like /embed/VIDEO_ID — get last segment, strip any params
-      const parts = url.pathname.split('/').filter(Boolean);
-      const raw = parts[parts.length - 1] || '';
-      // Clean: remove query fragments that might be stuck
-      return raw.split('?')[0].split('&')[0] || null;
-    } catch { return null; }
-  }
-
-  /**
-   * Fetch English captions from YouTube.
-   * Strategy: InnerTube API → page scrape → direct timedtext URL.
-   */
-  async _fetchCaptions(videoId) {
-    console.log(`[SkillBridge] Fetching captions for video: ${videoId}`);
-
-    // Method 1: YouTube InnerTube API (most reliable)
-    const innertubeCaptions = await this._fetchViaInnertube(videoId);
-    if (innertubeCaptions) return innertubeCaptions;
-
-    // Method 2: Scrape the YouTube watch page for captionTracks
-    const tracks = await this._scrapeCaptionTracks(videoId);
-    if (tracks) {
-      const captions = await this._fetchFromTrack(tracks);
-      if (captions) return captions;
-    }
-
-    // Method 3: Direct timedtext API
-    const directCaptions = await this._fetchTimedTextDirect(videoId);
-    if (directCaptions) return directCaptions;
-
-    console.log('[SkillBridge] All caption fetch methods failed for', videoId);
-    return null;
-  }
-
-  /**
-   * Method 1: YouTube InnerTube API — most reliable for getting caption data.
-   */
-  async _fetchViaInnertube(videoId) {
-    try {
-      const apiUrl = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
-      const body = JSON.stringify({
-        videoId: videoId,
-        context: {
-          client: {
-            hl: 'en',
-            gl: 'US',
-            clientName: 'WEB',
-            clientVersion: '2.20240101.00.00'
-          }
-        }
-      });
-
-      const resp = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({
-          type: 'FETCH_URL',
-          url: apiUrl,
-          method: 'POST',
-          body: body
-        }, resolve);
-      });
-
-      if (!resp?.ok) {
-        console.log('[SkillBridge] InnerTube API failed:', resp?.error);
-        return null;
-      }
-
-      const data = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data;
-      const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-
-      if (!captionTracks || captionTracks.length === 0) {
-        console.log('[SkillBridge] InnerTube: no caption tracks found');
-        return null;
-      }
-
-      console.log(`[SkillBridge] InnerTube: found ${captionTracks.length} track(s)`);
-
-      // Prefer: manual English > auto English > any first track
-      const track = captionTracks.find(t => t.languageCode === 'en' && t.kind !== 'asr') ||
-                    captionTracks.find(t => t.languageCode === 'en') ||
-                    captionTracks[0];
-
-      if (!track?.baseUrl) return null;
-
-      // Fetch the actual caption text in json3 format
-      return await this._fetchFromTrack(track);
-    } catch (err) {
-      console.warn('[SkillBridge] InnerTube fetch failed:', err);
-      return null;
-    }
-  }
-
-  /**
-   * Method 2: Scrape YouTube page for caption track URLs.
-   */
-  async _scrapeCaptionTracks(videoId) {
-    try {
-      const pageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-      const pageResp = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: 'FETCH_URL', url: pageUrl }, resolve);
-      });
-
-      if (!pageResp?.ok) {
-        console.log('[SkillBridge] YouTube page fetch failed:', pageResp?.error);
-        return null;
-      }
-
-      // Try multiple regex patterns — YouTube changes their page structure
-      const patterns = [
-        /"captionTracks":(\[.*?\])(?=,")/,
-        /"captionTracks":\s*(\[.+?\])\s*[,}]/,
-        /captionTracks\\?":\s*(\[.+?\])/,
-      ];
-
-      let rawJson = null;
-      for (const pat of patterns) {
-        const m = pageResp.data.match(pat);
-        if (m) { rawJson = m[1]; break; }
-      }
-
-      if (!rawJson) {
-        console.log('[SkillBridge] No captionTracks in page data');
-        return null;
-      }
-
-      // Clean escaped characters
-      rawJson = rawJson
-        .replace(/\\u0026/g, '&')
-        .replace(/\\"/g, '"')
-        .replace(/\\\\/g, '\\');
-
-      const tracks = JSON.parse(rawJson);
-      if (!Array.isArray(tracks) || tracks.length === 0) return null;
-
-      return tracks.find(t => t.languageCode === 'en' && t.kind !== 'asr') ||
-             tracks.find(t => t.languageCode === 'en') ||
-             tracks[0];
-    } catch (err) {
-      console.warn('[SkillBridge] Caption track scrape failed:', err);
-      return null;
-    }
-  }
-
-  /**
-   * Fetch captions from a track's baseUrl in json3 format.
-   */
-  async _fetchFromTrack(track) {
-    if (!track?.baseUrl) return null;
-    try {
-      const url = track.baseUrl + (track.baseUrl.includes('?') ? '&' : '?') + 'fmt=json3';
-      const resp = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: 'FETCH_URL', url }, resolve);
-      });
-      if (!resp?.ok) {
-        console.log('[SkillBridge] Track fetch failed:', resp?.error);
-        return null;
-      }
-      return this._parseJson3(resp.data);
-    } catch (err) {
-      console.warn('[SkillBridge] Track fetch failed:', err);
-      return null;
-    }
-  }
-
-  /**
-   * Method 3: Direct timedtext API — last resort.
-   */
-  async _fetchTimedTextDirect(videoId) {
-    try {
-      // Try auto-generated English captions
-      const urls = [
-        `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&kind=asr&fmt=json3`,
-        `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&fmt=json3`,
-      ];
-
-      for (const url of urls) {
-        const resp = await new Promise((resolve) => {
-          chrome.runtime.sendMessage({ type: 'FETCH_URL', url }, resolve);
-        });
-        if (resp?.ok) {
-          const captions = this._parseJson3(resp.data);
-          if (captions) return captions;
-        }
-      }
-
-      return null;
-    } catch (err) {
-      console.warn('[SkillBridge] Direct timedtext failed:', err);
-      return null;
-    }
-  }
-
-  /**
-   * Parse YouTube json3 caption format into our array format.
-   */
-  _parseJson3(rawData) {
-    try {
-      const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-      if (!data?.events) return null;
-
-      const captions = data.events
-        .filter(e => e.segs && e.segs.length > 0)
-        .map(e => ({
-          start: Math.floor((e.tStartMs || 0) / 1000),
-          text: e.segs.map(s => s.utf8 || '').join('').trim()
-        }))
-        .filter(e => e.text.length > 0);
-
-      return captions.length > 0 ? captions : null;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Translate captions using Google Translate batch via background proxy.
-   */
-  async _translateCaptions(captions, targetLang) {
-    const batchSize = 20;
-    const translated = [];
-
-    for (let i = 0; i < captions.length; i += batchSize) {
-      const batch = captions.slice(i, i + batchSize);
-      const texts = batch.map(c => c.text);
-
-      try {
-        const results = await this.translator.googleTranslateBatch(texts, targetLang);
-        for (let j = 0; j < batch.length; j++) {
-          translated.push({
-            start: batch[j].start,
-            original: batch[j].text,
-            translated: results[j] || batch[j].text,
-          });
-        }
-      } catch {
-        for (const c of batch) {
-          translated.push({ start: c.start, original: c.text, translated: c.text });
-        }
-      }
-    }
-    return translated;
-  }
-
-  _formatTime(seconds) {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  }
-
-  /**
-   * Create or update the transcript panel below a YouTube iframe.
-   */
-  async _createTranscriptPanel(iframe) {
-    const videoId = this._getVideoId(iframe);
-    if (!videoId) return;
-
-    this._removeTranscriptPanel(iframe);
-
-    const langLabel = this._ytLangName(this.targetLang) || this.targetLang.toUpperCase();
-
-    const panel = document.createElement('div');
-    panel.className = 'sb-transcript-panel'; // starts collapsed
-    panel.setAttribute('translate', 'no'); // prevent browser/extension translation
-    panel.innerHTML = `
-      <div class="sb-transcript-header">
-        <span class="sb-transcript-arrow">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M6 3l5 5-5 5V3z"/></svg>
-        </span>
-        <span class="sb-transcript-header-title">Video Script</span>
-        <div class="sb-transcript-header-meta">
-          <button class="sb-transcript-toggle-lang" title="Toggle EN / ${langLabel}" style="display:none">EN ↔ ${langLabel}</button>
-        </div>
-      </div>
-      <div class="sb-transcript-body">
-        <div class="sb-transcript-loading">
-          <span class="si18n-thinking-dots">
-            <span class="si18n-dot"></span><span class="si18n-dot"></span><span class="si18n-dot"></span>
-          </span>
-          <span style="margin-left:8px">Loading...</span>
-        </div>
-      </div>
-    `;
-
-    // Insert after iframe or its parent wrapper
-    const wrapper = iframe.closest('.embed-responsive, .video-wrapper, .sj-lesson-video') || iframe.parentElement;
-    if (wrapper && wrapper.parentElement) {
-      wrapper.parentElement.insertBefore(panel, wrapper.nextSibling);
-    } else {
-      iframe.parentElement.insertBefore(panel, iframe.nextSibling);
-    }
-    this._transcriptPanels.set(iframe, panel);
-
-    // Toggle expand/collapse — click header to toggle
-    const header = panel.querySelector('.sb-transcript-header');
-    const body = panel.querySelector('.sb-transcript-body');
-    header.addEventListener('click', (e) => {
-      // Don't toggle when clicking the lang button
-      if (e.target.closest('.sb-transcript-toggle-lang')) return;
-      panel.classList.toggle('expanded');
-    });
-
-    // Fetch and translate captions
-    const captions = await this._fetchCaptions(videoId);
-    if (!captions || captions.length === 0) {
-      body.innerHTML = '<div class="sb-transcript-empty">Captions not available for this video.</div>';
-      // Auto-expand to show empty state, then allow toggle
-      panel.classList.add('expanded');
-      return;
-    }
-
-    const translated = await this._translateCaptions(captions, this.targetLang);
-
-    // Show the toggle button now that we have data
-    const toggleBtnEl = panel.querySelector('.sb-transcript-toggle-lang');
-    if (toggleBtnEl) toggleBtnEl.style.display = '';
-
-    // Render lines
-    let showOriginal = false;
-    const linesHtml = translated.map(line => `
-      <div class="sb-transcript-line" data-time="${line.start}">
-        <span class="sb-transcript-time">${this._formatTime(line.start)}</span>
-        <span class="sb-transcript-text" data-original="${this._esc(line.original)}" data-translated="${this._esc(line.translated)}">${line.translated}</span>
-      </div>
-    `).join('');
-
-    body.innerHTML = `<div class="sb-transcript-lines">${linesHtml}</div>`;
-
-    // Toggle EN ↔ target language
-    const toggleBtn = panel.querySelector('.sb-transcript-toggle-lang');
-    toggleBtn.addEventListener('click', () => {
-      showOriginal = !showOriginal;
-      toggleBtn.textContent = showOriginal ? `EN ↔ ${langLabel}` : `${langLabel} ↔ EN`;
-      panel.querySelectorAll('.sb-transcript-text').forEach(el => {
-        el.textContent = showOriginal ? el.dataset.original : el.dataset.translated;
-      });
-    });
-
-    // Click timestamp → seek video
-    body.addEventListener('click', (e) => {
-      const line = e.target.closest('.sb-transcript-line');
-      if (!line) return;
-      const time = parseInt(line.dataset.time, 10);
-      if (isNaN(time)) return;
-
-      try {
-        iframe.contentWindow.postMessage(JSON.stringify({
-          event: 'command', func: 'seekTo', args: [time, true]
-        }), '*');
-      } catch (err) { console.warn('[SkillBridge] Seek failed:', err); }
-
-      panel.querySelectorAll('.sb-transcript-line.active').forEach(el => el.classList.remove('active'));
-      line.classList.add('active');
-    });
-
-    console.log(`[SkillBridge] Transcript panel ready (${translated.length} lines)`);
-  }
-
-  _removeTranscriptPanel(iframe) {
-    const panel = this._transcriptPanels.get(iframe);
-    if (panel) { panel.remove(); this._transcriptPanels.delete(iframe); }
-  }
-
-  _esc(text) {
-    return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 }
 
