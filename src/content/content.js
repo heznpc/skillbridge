@@ -200,7 +200,7 @@
 
           if (wasImproved) {
             // Update with improved translation + fade effect
-            entry.el.textContent = finalTranslation;
+            safeReplaceText(entry.el, finalTranslation);
             entry.el.classList.add('si18n-text-updated');
             setTimeout(() => entry.el.classList.remove('si18n-text-updated'), 500);
           }
@@ -272,7 +272,7 @@
       // 1. Try static dictionary (element-level)
       const elementMatch = translator.staticLookup(fullText);
       if (elementMatch) {
-        el.textContent = elementMatch;
+        safeReplaceText(el, elementMatch);
         staticCount++;
         continue;
       }
@@ -343,7 +343,7 @@
         const cached = await translator.cachedLookup(item.text, targetLang);
         if (cached) {
           if (item.el && item.el.parentNode) {
-            item.el.textContent = cached;
+            safeReplaceText(item.el, cached);
             trackTranslatedElement(item.text, item.el);
           }
         } else {
@@ -361,7 +361,7 @@
         const item = uncached[i];
         const translated = translations[i];
         if (translated && translated !== item.text && item.el && item.el.parentNode) {
-          item.el.textContent = translated;
+          safeReplaceText(item.el, translated);
           trackTranslatedElement(item.text, item.el);
           // Queue Gemini check — only add spinner if actually queued
           const queued = translator.queueGeminiVerify(item.text, translated, targetLang);
@@ -516,6 +516,49 @@
     return nodes;
   }
 
+  /**
+   * Safely replace text in an element WITHOUT destroying child elements
+   * (e.g., SVG checkboxes, icons, badges in sidebar items).
+   * Only replaces text nodes, leaving child elements intact.
+   */
+  function safeReplaceText(el, newText) {
+    // No child elements → safe to use textContent
+    if (el.children.length === 0) {
+      el.textContent = newText;
+      return;
+    }
+
+    // Has child elements — replace only direct text nodes
+    const textNodes = [];
+    for (const node of el.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0) {
+        textNodes.push(node);
+      }
+    }
+
+    if (textNodes.length === 1) {
+      textNodes[0].textContent = newText;
+    } else if (textNodes.length > 1) {
+      // Put all text in the first text node, clear the rest
+      textNodes[0].textContent = newText;
+      for (let i = 1; i < textNodes.length; i++) {
+        textNodes[i].textContent = '';
+      }
+    } else {
+      // No direct text nodes but has children — try deeper text nodes
+      const deepTextNodes = getTextNodes(el);
+      if (deepTextNodes.length > 0) {
+        deepTextNodes[0].textContent = newText;
+        for (let i = 1; i < deepTextNodes.length; i++) {
+          deepTextNodes[i].textContent = '';
+        }
+      } else {
+        // Last resort
+        el.textContent = newText;
+      }
+    }
+  }
+
   function isCodeContent(node) {
     let parent = node.parentElement;
     while (parent) {
@@ -579,7 +622,7 @@
           const match = translator.staticLookup(fullText);
           if (match) {
             if (!originalTexts.has(el)) originalTexts.set(el, el.innerHTML);
-            el.textContent = match;
+            safeReplaceText(el, match);
             getTextNodes(el).forEach(tn => handledNodes.add(tn));
           } else if (fullText.length >= 10) {
             gtCandidates.push(el);
