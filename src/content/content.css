@@ -23,7 +23,7 @@
    to convey visual authority without changing font family.
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Sans+Arabic:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Sans+Thai:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700;900&family=Noto+Sans+SC:wght@400;500;700;900&family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Sans+Arabic:wght@400;500;700&family=Noto+Sans+Devanagari:wght@400;500;700&family=Noto+Sans+Thai:wght@400;500;700&display=swap');
 
 /* ---- Korean ---- */
 
@@ -34,11 +34,17 @@ body.si18n-lang-ko,
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
 }
 
-/* Headings — heavier weight + tight tracking to match Copernicus's visual authority */
-.si18n-lang-ko h1, .si18n-lang-ko h2, .si18n-lang-ko h3,
-.si18n-lang-ko h4, .si18n-lang-ko h5, .si18n-lang-ko h6 {
+/* Headings — Black weight (900) to match Copernicus Bold's visual punch */
+.si18n-lang-ko h1, .si18n-lang-ko h2 {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
-  font-weight: 700;
+  font-weight: 900 !important;
+  letter-spacing: -0.03em;
+}
+
+.si18n-lang-ko h3, .si18n-lang-ko h4,
+.si18n-lang-ko h5, .si18n-lang-ko h6 {
+  font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
+  font-weight: 700 !important;
   letter-spacing: -0.02em;
 }
 
@@ -49,8 +55,8 @@ body.si18n-lang-ko,
 .si18n-lang-ko .details-pane-description h2,
 .si18n-lang-ko .details-pane-description h3 {
   font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif !important;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 900 !important;
+  letter-spacing: -0.03em;
 }
 
 /* Nav, links, buttons, UI text */
@@ -79,10 +85,14 @@ body.si18n-lang-ko,
 .si18n-lang-ja {
   font-family: "Noto Sans JP", "Hiragino Kaku Gothic Pro", "Yu Gothic", "Meiryo", sans-serif !important;
 }
-.si18n-lang-ja h1, .si18n-lang-ja h2, .si18n-lang-ja h3,
-.si18n-lang-ja h4, .si18n-lang-ja h5, .si18n-lang-ja h6 {
+.si18n-lang-ja h1, .si18n-lang-ja h2 {
   font-family: "Noto Sans JP", "Hiragino Kaku Gothic Pro", "Yu Gothic", "Meiryo", sans-serif !important;
-  font-weight: 700;
+  font-weight: 900 !important;
+  letter-spacing: -0.03em;
+}
+.si18n-lang-ja h3, .si18n-lang-ja h4, .si18n-lang-ja h5, .si18n-lang-ja h6 {
+  font-family: "Noto Sans JP", "Hiragino Kaku Gothic Pro", "Yu Gothic", "Meiryo", sans-serif !important;
+  font-weight: 700 !important;
   letter-spacing: -0.02em;
 }
 
@@ -91,10 +101,14 @@ body.si18n-lang-ko,
 .si18n-lang-zh-CN {
   font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif !important;
 }
-.si18n-lang-zh-CN h1, .si18n-lang-zh-CN h2, .si18n-lang-zh-CN h3,
-.si18n-lang-zh-CN h4, .si18n-lang-zh-CN h5, .si18n-lang-zh-CN h6 {
+.si18n-lang-zh-CN h1, .si18n-lang-zh-CN h2 {
   font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif !important;
-  font-weight: 700;
+  font-weight: 900 !important;
+  letter-spacing: -0.03em;
+}
+.si18n-lang-zh-CN h3, .si18n-lang-zh-CN h4, .si18n-lang-zh-CN h5, .si18n-lang-zh-CN h6 {
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif !important;
+  font-weight: 700 !important;
   letter-spacing: -0.02em;
 }
 
@@ -103,10 +117,14 @@ body.si18n-lang-ko,
 .si18n-lang-zh-TW {
   font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif !important;
 }
-.si18n-lang-zh-TW h1, .si18n-lang-zh-TW h2, .si18n-lang-zh-TW h3,
-.si18n-lang-zh-TW h4, .si18n-lang-zh-TW h5, .si18n-lang-zh-TW h6 {
+.si18n-lang-zh-TW h1, .si18n-lang-zh-TW h2 {
   font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif !important;
-  font-weight: 700;
+  font-weight: 900 !important;
+  letter-spacing: -0.03em;
+}
+.si18n-lang-zh-TW h3, .si18n-lang-zh-TW h4, .si18n-lang-zh-TW h5, .si18n-lang-zh-TW h6 {
+  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif !important;
+  font-weight: 700 !important;
   letter-spacing: -0.02em;
 }
 

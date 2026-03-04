@@ -32,11 +32,19 @@ chrome.runtime.onInstalled.addListener((details) => {
 // Message handlers
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'FETCH_URL') {
+    const fetchOpts = {};
     const headers = {};
     if (msg.url.includes('youtube.com')) {
       headers['Cookie'] = 'CONSENT=YES+cb; SOCS=CAESEwgDEgk2OTgxMTk0NTQaAmVuIAEaBgiA_LyaBg';
     }
-    fetch(msg.url, { headers })
+    // Support POST requests (used for InnerTube API)
+    if (msg.method === 'POST' && msg.body) {
+      fetchOpts.method = 'POST';
+      fetchOpts.body = msg.body;
+      headers['Content-Type'] = 'application/json';
+    }
+    fetchOpts.headers = headers;
+    fetch(msg.url, fetchOpts)
       .then(resp => {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         return resp.text();

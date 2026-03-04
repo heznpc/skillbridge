@@ -155,17 +155,23 @@ class YouTubeSubtitleManager {
 
   /**
    * Fetch English captions from YouTube.
-   * Strategy: Try page scrape first, fall back to timedtext direct URL.
+   * Strategy: InnerTube API → page scrape → direct timedtext URL.
    */
   async _fetchCaptions(videoId) {
-    // Method 1: Scrape the YouTube watch page for captionTracks
+    console.log(`[SkillBridge] Fetching captions for video: ${videoId}`);
+
+    // Method 1: YouTube InnerTube API (most reliable)
+    const innertubeCaptions = await this._fetchViaInnertube(videoId);
+    if (innertubeCaptions) return innertubeCaptions;
+
+    // Method 2: Scrape the YouTube watch page for captionTracks
     const tracks = await this._scrapeCaptionTracks(videoId);
     if (tracks) {
       const captions = await this._fetchFromTrack(tracks);
       if (captions) return captions;
     }
 
-    // Method 2: Direct timedtext API (works for some auto-generated captions)
+    // Method 3: Direct timedtext API
     const directCaptions = await this._fetchTimedTextDirect(videoId);
     if (directCaptions) return directCaptions;
 
@@ -174,7 +180,64 @@ class YouTubeSubtitleManager {
   }
 
   /**
-   * Method 1: Scrape YouTube page for caption track URLs.
+   * Method 1: YouTube InnerTube API — most reliable for getting caption data.
+   */
+  async _fetchViaInnertube(videoId) {
+    try {
+      const apiUrl = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
+      const body = JSON.stringify({
+        videoId: videoId,
+        context: {
+          client: {
+            hl: 'en',
+            gl: 'US',
+            clientName: 'WEB',
+            clientVersion: '2.20240101.00.00'
+          }
+        }
+      });
+
+      const resp = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          type: 'FETCH_URL',
+          url: apiUrl,
+          method: 'POST',
+          body: body
+        }, resolve);
+      });
+
+      if (!resp?.ok) {
+        console.log('[SkillBridge] InnerTube API failed:', resp?.error);
+        return null;
+      }
+
+      const data = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data;
+      const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+
+      if (!captionTracks || captionTracks.length === 0) {
+        console.log('[SkillBridge] InnerTube: no caption tracks found');
+        return null;
+      }
+
+      console.log(`[SkillBridge] InnerTube: found ${captionTracks.length} track(s)`);
+
+      // Prefer: manual English > auto English > any first track
+      const track = captionTracks.find(t => t.languageCode === 'en' && t.kind !== 'asr') ||
+                    captionTracks.find(t => t.languageCode === 'en') ||
+                    captionTracks[0];
+
+      if (!track?.baseUrl) return null;
+
+      // Fetch the actual caption text in json3 format
+      return await this._fetchFromTrack(track);
+    } catch (err) {
+      console.warn('[SkillBridge] InnerTube fetch failed:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Method 2: Scrape YouTube page for caption track URLs.
    */
   async _scrapeCaptionTracks(videoId) {
     try {
@@ -215,7 +278,6 @@ class YouTubeSubtitleManager {
       const tracks = JSON.parse(rawJson);
       if (!Array.isArray(tracks) || tracks.length === 0) return null;
 
-      // Prefer: manual English > auto English > any first track
       return tracks.find(t => t.languageCode === 'en' && t.kind !== 'asr') ||
              tracks.find(t => t.languageCode === 'en') ||
              tracks[0];
@@ -235,7 +297,10 @@ class YouTubeSubtitleManager {
       const resp = await new Promise((resolve) => {
         chrome.runtime.sendMessage({ type: 'FETCH_URL', url }, resolve);
       });
-      if (!resp?.ok) return null;
+      if (!resp?.ok) {
+        console.log('[SkillBridge] Track fetch failed:', resp?.error);
+        return null;
+      }
       return this._parseJson3(resp.data);
     } catch (err) {
       console.warn('[SkillBridge] Track fetch failed:', err);
@@ -244,27 +309,24 @@ class YouTubeSubtitleManager {
   }
 
   /**
-   * Method 2: Direct timedtext API — works for videos with auto-generated captions.
+   * Method 3: Direct timedtext API — last resort.
    */
   async _fetchTimedTextDirect(videoId) {
     try {
-      // Try auto-generated English captions directly
-      const url = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&kind=asr&fmt=json3`;
-      const resp = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: 'FETCH_URL', url }, resolve);
-      });
-      if (resp?.ok) {
-        const captions = this._parseJson3(resp.data);
-        if (captions) return captions;
-      }
+      // Try auto-generated English captions
+      const urls = [
+        `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&kind=asr&fmt=json3`,
+        `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&fmt=json3`,
+      ];
 
-      // Try manual English captions
-      const url2 = `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&fmt=json3`;
-      const resp2 = await new Promise((resolve) => {
-        chrome.runtime.sendMessage({ type: 'FETCH_URL', url: url2 }, resolve);
-      });
-      if (resp2?.ok) {
-        return this._parseJson3(resp2.data);
+      for (const url of urls) {
+        const resp = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ type: 'FETCH_URL', url }, resolve);
+        });
+        if (resp?.ok) {
+          const captions = this._parseJson3(resp.data);
+          if (captions) return captions;
+        }
       }
 
       return null;
