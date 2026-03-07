@@ -682,17 +682,15 @@
   function getAttrsString(el) {
     const attrs = [];
     for (const attr of el.attributes) {
-      attrs.push(`${attr.name}="${attr.value.replace(/"/g, '&quot;')}"`);
+      attrs.push(`${attr.name}="${escapeHtml(attr.value)}"`);
     }
     return attrs.length ? ' ' + attrs.join(' ') : '';
   }
 
-  // Tags allowed in Gemini block translation output (after reconstruction)
-  const SAFE_TAGS = new Set([
-    'strong', 'b', 'em', 'i', 'a', 'span', 'code',
-    'mark', 'sub', 'sup', 'abbr', 'small', 'u', 's',
-    'pre', 'kbd', 'samp', 'var', 'br',
-  ]);
+  // Tags allowed in Gemini block translation output — derived from existing sets + <br>
+  const SAFE_TAGS = new Set(
+    [...INLINE_TAGS, ...NO_TRANSLATE_TAGS, 'BR'].map(t => t.toLowerCase())
+  );
 
   function xmlToHtml(translatedXml, tagInfo) {
     let html = translatedXml;
@@ -710,7 +708,10 @@
     html = html.replace(/<\/[xc]\d+>/g, '');
     // Strip any HTML tags not in SAFE_TAGS whitelist (prevent XSS from AI output)
     html = html.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, (match, tag) => {
-      return SAFE_TAGS.has(tag.toLowerCase()) ? match : '';
+      if (!SAFE_TAGS.has(tag.toLowerCase())) return '';
+      // Strip event handler attributes (on*) and javascript: URLs from safe tags
+      return match.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '')
+                  .replace(/\s+href\s*=\s*"javascript:[^"]*"/gi, '');
     });
     return html;
   }
